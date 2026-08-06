@@ -8,7 +8,7 @@
 namespace esphome::ds2438_ds248x {
 static const char *const TAG = "ds2438_ds248x";
 
-bool DS2438DS248xComponent::wait_() {
+bool DS2438DS248xComponent::wait_(uint8_t *status_out) {
   const uint8_t pointer[2] = {0xE1, 0xF0};
   uint8_t status = 1;
   if (this->write(pointer, 2) != i2c::ERROR_OK)
@@ -16,15 +16,30 @@ bool DS2438DS248xComponent::wait_() {
   for (uint16_t retry = 0; retry < 1000; retry++) {
     if (this->read(&status, 1) != i2c::ERROR_OK)
       return false;
-    if ((status & 0x01) == 0)
+    if ((status & 0x01) == 0) {
+      if (status_out != nullptr)
+        *status_out = status;
       return (status & 0x04) == 0;
+    }
   }
   return false;
 }
 
+bool DS2438DS248xComponent::configure_bridge_() {
+  const uint8_t reset = 0xF0;
+  // The temperature hub enables the strong pull-up for its conversion. Start
+  // this transaction from a known DS2484 configuration with APU enabled.
+  if (this->write(&reset, 1) != i2c::ERROR_OK)
+    return false;
+  delay(1);
+  const uint8_t config[2] = {0xD2, 0xE1};  // APU = 1, upper nibble complemented.
+  return this->write(config, 2) == i2c::ERROR_OK && this->wait_();
+}
+
 bool DS2438DS248xComponent::reset_wire_() {
   const uint8_t command = 0xB4;
-  return this->write(&command, 1) == i2c::ERROR_OK && this->wait_();
+  uint8_t status = 0;
+  return this->write(&command, 1) == i2c::ERROR_OK && this->wait_(&status) && (status & 0x02) != 0;
 }
 
 bool DS2438DS248xComponent::write_wire_(uint8_t value) {
@@ -32,14 +47,14 @@ bool DS2438DS248xComponent::write_wire_(uint8_t value) {
   return this->write(command, 2) == i2c::ERROR_OK && this->wait_();
 }
 
-uint8_t DS2438DS248xComponent::read_wire_() {
+bool DS2438DS248xComponent::read_wire_(uint8_t *value) {
   const uint8_t command = 0x96;
   const uint8_t pointer[2] = {0xE1, 0xE1};
-  uint8_t value = 0;
+  *value = 0;
   if (this->write(&command, 1) != i2c::ERROR_OK || !this->wait_() || this->write(pointer, 2) != i2c::ERROR_OK ||
-      this->read(&value, 1) != i2c::ERROR_OK)
-    return 0;
-  return value;
+      this->read(value, 1) != i2c::ERROR_OK)
+    return false;
+  return true;
 }
 
 bool DS2438DS248xComponent::select_() {
@@ -57,7 +72,8 @@ bool DS2438DS248xComponent::read_page_(uint8_t *page) {
   if (!this->command_(0xBE) || !this->write_wire_(0x00))
     return false;
   for (uint8_t i = 0; i < 9; i++)
-    page[i] = this->read_wire_();
+    if (!this->read_wire_(&page[i]))
+      return false;
   return crc8(page, 8) == page[8];
 }
 
@@ -74,8 +90,12 @@ void DS2438DS248xComponent::update() {
   if (this->busy_ || this->is_failed())
     return;
   this->busy_ = true;
+  if (!this->configure_bridge_()) {
+    this->fail_("DS2484 configuration failed");
+    return;
+  }
   if (!this->command_(0x44)) {
-    this->fail_("temperature conversion failed");
+    this->fail_("DS2438 did not acknowledge reset");
     return;
   }
   this->set_timeout("temperature", CONVERSION_TIME_MS, [this] { this->read_temperature_(); });
