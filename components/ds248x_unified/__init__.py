@@ -24,7 +24,7 @@ DS2438 = ns.class_("DS2438Sensor")
 temperature_schema = sensor.sensor_schema(unit_of_measurement=UNIT_CELSIUS, accuracy_decimals=1, device_class=DEVICE_CLASS_TEMPERATURE, state_class=STATE_CLASS_MEASUREMENT)
 humidity_schema = sensor.sensor_schema(unit_of_measurement=UNIT_PERCENT, accuracy_decimals=1, device_class=DEVICE_CLASS_HUMIDITY, state_class=STATE_CLASS_MEASUREMENT)
 voltage_schema = sensor.sensor_schema(unit_of_measurement=UNIT_VOLT, accuracy_decimals=2, device_class=DEVICE_CLASS_VOLTAGE, state_class=STATE_CLASS_MEASUREMENT)
-DS18_SCHEMA = temperature_schema.extend({cv.Required(CONF_ADDRESS): cv.uint64_t})
+DS18_SCHEMA = sensor.sensor_schema(DS18, unit_of_measurement=UNIT_CELSIUS, accuracy_decimals=1, device_class=DEVICE_CLASS_TEMPERATURE, state_class=STATE_CLASS_MEASUREMENT).extend({cv.Required(CONF_ADDRESS): cv.uint64_t})
 DS2438_SCHEMA = cv.Schema({cv.GenerateID(): cv.declare_id(DS2438), cv.Required(CONF_ADDRESS): cv.uint64_t, cv.Required(CONF_HUMIDITY): humidity_schema, cv.Optional(CONF_HUMIDITY_RAW): humidity_schema, cv.Optional(CONF_TEMPERATURE): temperature_schema, cv.Optional(CONF_VAD): voltage_schema, cv.Optional(CONF_VDD): voltage_schema})
 CONFIG_SCHEMA = cv.Schema({cv.GenerateID(): cv.declare_id(Hub), cv.Optional(CONF_ACTIVE_PULLUP, default=True): cv.boolean, cv.Optional(CONF_STRONG_PULLUP, default=True): cv.boolean, cv.Required(CONF_DS18B20): cv.ensure_list(DS18_SCHEMA), cv.Required(CONF_DS2438): cv.ensure_list(DS2438_SCHEMA)}).extend(cv.polling_component_schema("60s")).extend(i2c.i2c_device_schema(0x18))
 
