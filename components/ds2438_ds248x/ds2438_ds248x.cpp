@@ -25,6 +25,11 @@ bool DS2438DS248xComponent::wait_(uint8_t *status_out) {
   return false;
 }
 
+bool DS2438DS248xComponent::set_bridge_config_(uint8_t config) {
+  const uint8_t command[2] = {0xD2, static_cast<uint8_t>(config | ((~config & 0x0F) << 4))};
+  return this->write(command, 2) == i2c::ERROR_OK && this->wait_();
+}
+
 bool DS2438DS248xComponent::configure_bridge_() {
   const uint8_t reset = 0xF0;
   // The temperature hub enables the strong pull-up for its conversion. Start
@@ -32,8 +37,7 @@ bool DS2438DS248xComponent::configure_bridge_() {
   if (this->write(&reset, 1) != i2c::ERROR_OK)
     return false;
   delay(1);
-  const uint8_t config[2] = {0xD2, 0xE1};  // APU = 1, upper nibble complemented.
-  return this->write(config, 2) == i2c::ERROR_OK && this->wait_();
+  return this->set_bridge_config_(0x01);  // APU = 1.
 }
 
 bool DS2438DS248xComponent::reset_wire_() {
@@ -66,7 +70,15 @@ bool DS2438DS248xComponent::select_() {
   return true;
 }
 
-bool DS2438DS248xComponent::command_(uint8_t value) { return this->select_() && this->write_wire_(value); }
+bool DS2438DS248xComponent::command_(uint8_t value, bool strong_pullup) {
+  if (!this->select_())
+    return false;
+  // DS2438 can be parasite powered. The DS2484 automatically removes SPU
+  // after the following 1-Wire byte has been issued and the conversion ends.
+  if (strong_pullup && !this->set_bridge_config_(0x05))
+    return false;
+  return this->write_wire_(value);
+}
 
 bool DS2438DS248xComponent::read_page_(uint8_t *page) {
   if (!this->command_(0xBE) || !this->write_wire_(0x00))
@@ -94,7 +106,7 @@ void DS2438DS248xComponent::update() {
     this->fail_("DS2484 configuration failed");
     return;
   }
-  if (!this->command_(0x44)) {
+  if (!this->command_(0x44, true)) {
     this->fail_("DS2438 did not acknowledge reset");
     return;
   }
@@ -109,7 +121,7 @@ void DS2438DS248xComponent::read_temperature_() {
   }
   this->original_config_ = page[0];
   this->temperature_ = static_cast<int16_t>((uint16_t(page[2]) << 8) | page[1]) / 256.0f;
-  if (!this->write_ds2438_config_(this->original_config_ | CONFIG_AD) || !this->command_(0xB4)) {
+  if (!this->write_ds2438_config_(this->original_config_ | CONFIG_AD) || !this->command_(0xB4, true)) {
     this->fail_("VDD conversion failed");
     return;
   }
@@ -123,7 +135,7 @@ void DS2438DS248xComponent::read_vdd_() {
     return;
   }
   this->vdd_ = ((uint16_t(page[4]) << 8) | page[3]) / 100.0f;
-  if (!this->write_ds2438_config_(this->original_config_ & ~CONFIG_AD) || !this->command_(0xB4)) {
+  if (!this->write_ds2438_config_(this->original_config_ & ~CONFIG_AD) || !this->command_(0xB4, true)) {
     this->fail_("VAD conversion failed");
     return;
   }

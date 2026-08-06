@@ -40,12 +40,13 @@ class DS2438DS248xComponent : public PollingComponent, public i2c::I2CDevice {
   float vdd_{NAN};
 
   bool wait_(uint8_t *status = nullptr);
+  bool set_bridge_config_(uint8_t config);
   bool configure_bridge_();
   bool reset_wire_();
   bool write_wire_(uint8_t value);
   bool read_wire_(uint8_t *value);
   bool select_();
-  bool command_(uint8_t value);
+  bool command_(uint8_t value, bool strong_pullup = false);
   bool read_page_(uint8_t *page);
   bool write_ds2438_config_(uint8_t value);
   void read_temperature_();
