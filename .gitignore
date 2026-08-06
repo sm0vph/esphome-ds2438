@@ -1,0 +1,9 @@
+secrets.yaml
+.esphome/
+__pycache__/
+*.py[cod]
+
+# Local installation configuration and notes
+fuktstyrning.yaml
+README.local.md
+observations/
