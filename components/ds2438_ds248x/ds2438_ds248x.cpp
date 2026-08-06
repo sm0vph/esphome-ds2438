@@ -81,6 +81,11 @@ bool DS2438DS248xComponent::command_(uint8_t value, bool strong_pullup) {
 }
 
 bool DS2438DS248xComponent::read_page_(uint8_t *page) {
+  // DS2438 requires Recall Memory before every Read Scratchpad operation.
+  // Without it, a responding device can return an all-zero scratchpad page.
+  if (!this->command_(0xB8) || !this->write_wire_(0x00))
+    return false;
+  delay(1);
   if (!this->command_(0xBE) || !this->write_wire_(0x00))
     return false;
   for (uint8_t i = 0; i < 9; i++)
