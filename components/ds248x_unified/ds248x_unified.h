@@ -4,6 +4,8 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/core/component.h"
 
+#include <cmath>
+
 namespace esphome::ds248x_unified {
 
 class DS18B20Sensor : public sensor::Sensor {
