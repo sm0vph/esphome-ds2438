@@ -1,6 +1,6 @@
 substitutions:
-  device_name: ds2438-humidity-example
-  friendly_name: DS2438 humidity example
+  device_name: ds248x-unified-example
+  friendly_name: DS248x unified example
 
 esphome:
   name: ${device_name}
@@ -8,11 +8,9 @@ esphome:
   min_version: 2026.7.0
 
 external_components:
-  # For local development. When using the component from GitHub, replace this
-  # source with the repository URL and a released tag.
-  - source:
-      type: local
-      path: components
+  - source: github://sm0vph/esphome-ds2438@main
+    components: [ds248x_unified]
+    refresh: 0s
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -20,60 +18,48 @@ esp32:
     type: esp-idf
 
 logger:
-
 api:
   encryption:
     key: !secret api_encryption_key
-
 ota:
   - platform: esphome
     password: !secret ota_password
-
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-
 web_server:
   port: 80
   version: 3
 
 i2c:
-  sda: GPIO1
-  scl: GPIO2
+  sda: GPIO2  # Replace with the pins on your ESP board.
+  scl: GPIO1
   frequency: 100kHz
-  scan: true
 
-one_wire:
-  - platform: ds2484
-    id: one_wire_bus
+ds248x_unified:
+  - id: one_wire_hub
     address: 0x18
     active_pullup: true
-    strong_pullup: false
+    strong_pullup: true
+    update_interval: 60s
 
-sensor:
-  # Replace this example address with the complete 64-bit address of a DS2438.
-  - platform: ds2438
-    address: 0x0000000000000026
-    one_wire_id: one_wire_bus
-    update_interval: 30s
-    humidity:
-      name: "Relative humidity"
-      model: HIH4031
-    temperature:
-      name: "DS2438 temperature"
-    humidity_raw:
-      name: "Uncompensated humidity"
-      entity_category: diagnostic
-    vad:
-      name: "HIH-4031 output voltage"
-      entity_category: diagnostic
-    vdd:
-      name: "DS2438 supply voltage"
-      entity_category: diagnostic
+    ds18b20:
+      - name: "External temperature"
+        address: 0x0000000000000028
 
-  # DS18B20 devices can share the same DS2484 bus. Replace the address below.
-  - platform: dallas_temp
-    address: 0x0000000000000028
-    one_wire_id: one_wire_bus
-    name: "External temperature"
-    update_interval: 30s
+    ds2438:
+      - id: humidity_module
+        address: 0x0000000000000026
+        humidity:
+          name: "Relative humidity"
+        temperature:
+          name: "DS2438 temperature"
+        humidity_raw:
+          name: "Uncompensated humidity"
+          entity_category: diagnostic
+        vad:
+          name: "HIH-4031 output voltage"
+          entity_category: diagnostic
+        vdd:
+          name: "DS2438 supply voltage"
+          entity_category: diagnostic

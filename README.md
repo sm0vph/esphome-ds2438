@@ -1,112 +1,92 @@
-# ESPHome DS2438
+# ESPHome DS248x unified hub
 
-An external ESPHome component for Maxim DS2438-based sensor modules. It
-communicates through ESPHome's shared 1-Wire API and therefore works on a
-DS2484 bus together with standard devices such as DS18B20 temperature sensors.
+`ds248x_unified` is an external ESPHome component for a DS2484 I²C-to-1-Wire
+bridge. One hub owns the full 1-Wire transaction sequence and supports both
+DS18B20 temperature sensors and DS2438 modules fitted with Honeywell HIH-4031
+humidity sensors.
 
-Humidity conversion is selected explicitly in YAML. The first supported model
-is the Honeywell HIH-4031; additional sensor profiles can be added without
-changing the component platform or repository name.
+## What it publishes
 
-The component publishes:
+- DS18B20 temperature;
+- temperature-compensated relative humidity from each DS2438/HIH-4031;
+- DS2438 local temperature, VAD and VDD; and
+- uncompensated relative humidity as diagnostics.
 
-- temperature-compensated relative humidity,
-- the DS2438's local temperature,
-- uncompensated relative humidity for diagnostics,
-- the HIH-4031 output voltage (`VAD`),
-- the DS2438 supply voltage (`VDD`).
+The hub runs one controlled update cycle: DS18B20 conversion and reads first,
+then each DS2438 temperature/VDD/VAD measurement. This avoids concurrent
+commands to the same DS2484 and is suitable for mixed 1-Wire networks.
 
-## Hardware assumptions
+## Hardware
 
-The implementation assumes a Honeywell HIH-4031 powered within its specified
-4.0 V to 5.8 V range, with its analog output connected to the DS2438 `VAD`
-input. The DS2438 family code is `0x26`.
-
-The driver does not write the A/D selection to EEPROM during measurements. It
-changes the volatile scratchpad configuration, performs the conversions and
-then restores the previous configuration. Scratchpad reads are protected by
-CRC checks.
-
-DS18B20 and DS2438 devices may share the same bus master. Each device is
-selected by its unique 64-bit 1-Wire address, and conversions are performed
-using short asynchronous steps so ESPHome's main loop is not blocked.
+- DS2484 at I²C address `0x18`;
+- `SLPZ` must be held high;
+- a pull-up is required on the 1-Wire bus; and
+- HIH-4031/DS2438 modules require a valid 4.0–5.8 V supply for the humidity
+  calculation.
 
 ## Installation
 
-Place the repository's `components` directory beside the ESPHome YAML file and
-use a local source:
-
 ```yaml
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://sm0vph/esphome-ds2438@main
+    components: [ds248x_unified]
+    refresh: 0s
 ```
 
-After this repository has been published, it can instead be loaded directly
-from a tagged Git revision:
-
-```yaml
-external_components:
-  - source: github://OWNER/REPOSITORY@VERSION
-    components:
-      - ds2438
-    refresh: never
-```
+`refresh: 0s` makes ESPHome fetch the current component revision for every
+compile. Pin the revision to a tag or commit once you want reproducible builds.
 
 ## Configuration
 
 ```yaml
-sensor:
-  - platform: ds2438
-    address: 0x0000000000000026  # Replace with the DS2438 address.
-    one_wire_id: one_wire_bus
-    update_interval: 30s
+i2c:
+  sda: GPIO2
+  scl: GPIO1
+  frequency: 100kHz
 
-    humidity:
-      name: "Relative humidity"
-      model: HIH4031
+ds248x_unified:
+  - id: one_wire_hub
+    address: 0x18
+    active_pullup: true
+    strong_pullup: true
+    update_interval: 60s
 
-    temperature:
-      name: "DS2438 temperature"
+    ds18b20:
+      - name: "External temperature"
+        address: 0x0000000000000028
 
-    humidity_raw:
-      name: "Uncompensated humidity"
-      entity_category: diagnostic
-
-    vad:
-      name: "HIH-4031 output voltage"
-      entity_category: diagnostic
-
-    vdd:
-      name: "DS2438 supply voltage"
-      entity_category: diagnostic
+    ds2438:
+      - id: humidity_module
+        address: 0x0000000000000026
+        humidity:
+          name: "Relative humidity"
+        temperature:
+          name: "DS2438 temperature"
+        humidity_raw:
+          name: "Uncompensated humidity"
+          entity_category: diagnostic
+        vad:
+          name: "HIH-4031 output voltage"
+          entity_category: diagnostic
+        vdd:
+          name: "DS2438 supply voltage"
+          entity_category: diagnostic
 ```
 
-`humidity` and its `model` are required. Currently, `HIH4031` is the only
-accepted model; ESPHome rejects unsupported values during validation. The
-other output sensors are optional. See
-[`example.yaml`](example.yaml) for a complete example
-using a DS2484 and a DS18B20 on the same bus.
+Replace every example address with the complete 64-bit 1-Wire address. See
+[`example.yaml`](example.yaml) for a complete ESPHome configuration.
 
-## Supported humidity models
-
-### HIH4031
-
-The HIH-4031 is part of Honeywell's HIH-4000 analog humidity sensor family.
-The component calculates sensor-relative humidity from the ratiometric voltage
-and then applies temperature compensation:
+## HIH-4031 calculation
 
 ```text
-sensor_RH = ((VAD / VDD) - 0.16) / 0.0062
-true_RH   = sensor_RH / (1.0546 - 0.00216 × temperature_C)
+raw_RH  = ((VAD / VDD) - 0.16) / 0.0062
+true_RH = raw_RH / (1.0546 - 0.00216 × temperature_C)
 ```
 
-The DS2438's own temperature is used for this compensation because it is
-located on the same module as the humidity sensor.
+The DS2438 temperature is used for compensation. The hub uses DS2438 Recall
+Memory before every scratchpad read, as required by the DS2438 protocol.
 
-## Status
+## Validation
 
-The component builds with ESPHome 2026.7.3 using ESP-IDF for ESP32-S3. Hardware
-validation of the `HIH4031` profile against OWFS `HIH4000/humidity` is still
-pending.
+Hardware-tested with one DS2484, six DS18B20 sensors and three DS2438/HIH-4031
+modules on the same 1-Wire network using ESPHome 2026.7.4.
