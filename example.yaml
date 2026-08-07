@@ -9,7 +9,7 @@ esphome:
 
 external_components:
   - source: github://sm0vph/esphome-ds2438@main
-    components: [ds248x_unified]
+    components: [ds248x_unified, vtt_mold_index]
     refresh: 0s
 
 esp32:
@@ -44,13 +44,15 @@ ds248x_unified:
     update_interval: 60s
 
     ds18b20:
-      - name: "External temperature"
+      - id: external_temperature
+        name: "External temperature"
         address: 0x0000000000000028
 
     ds2438:
       - id: humidity_module
         address: 0x0000000000000026
         humidity:
+          id: crawlspace_humidity
           name: "Relative humidity"
         temperature:
           name: "DS2438 temperature"
@@ -63,3 +65,12 @@ ds248x_unified:
         vdd:
           name: "DS2438 supply voltage"
           entity_category: diagnostic
+
+sensor:
+  # Optional, time-dependent diagnostic. It does not control any switch.
+  - platform: vtt_mold_index
+    name: "VTT mould index"
+    temperature: external_temperature
+    humidity: crawlspace_humidity
+    material: very_sensitive
+    update_interval: 60s

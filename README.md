@@ -4,7 +4,8 @@
 bridge. One hub owns the full 1-Wire transaction sequence and supports both
 DS18B20 temperature sensors and DS2438 modules fitted with Honeywell HIH-4031
 humidity sensors. The optional `mold_risk_index` sensor calculates local
-crawl-space mold risk from a chosen temperature and humidity sensor.
+crawl-space mold risk from a chosen temperature and humidity sensor. The
+optional `vtt_mold_index` sensor adds the time-dependent Finnish/VTT index.
 
 ## What it publishes
 
@@ -30,7 +31,7 @@ commands to the same DS2484 and is suitable for mixed 1-Wire networks.
 ```yaml
 external_components:
   - source: github://sm0vph/esphome-ds2438@main
-    components: [ds248x_unified, mold_risk_index]
+    components: [ds248x_unified, mold_risk_index, vtt_mold_index]
     refresh: 0s
 ```
 
@@ -117,6 +118,30 @@ Risk `1` corresponds to possible growth after eight weeks or more, `2` to four
 to eight weeks, and `3` to less than four weeks. This is a current-condition
 risk classification; it does not persist a biological growth history across
 reboots.
+
+## VTT mould index
+
+`vtt_mold_index` implements the time-dependent Finnish/VTT model, which
+integrates temperature and RH into a mould index from `0` to `6`. The value is
+saved by the ESP32 every 15 minutes so normal reboots retain the accumulated
+history. It is diagnostic only: adding this sensor does not control any switch.
+
+```yaml
+sensor:
+  - platform: vtt_mold_index
+    name: "Crawl-space north VTT mould index"
+    temperature: crawlspace_north_external_temperature
+    humidity: crawlspace_north_humidity
+    material: very_sensitive
+    update_interval: 60s
+```
+
+Available material classes are `very_sensitive`, `sensitive`,
+`medium_resistant`, and `resistant`; use `very_sensitive` as the conservative
+choice for wood or organic material when the actual material is unknown. The
+model uses the sensor temperature as a surface-temperature approximation. A
+separate surface-temperature sensor is preferable if the monitored surface is
+materially colder than the air.
 
 ## Validation
 
