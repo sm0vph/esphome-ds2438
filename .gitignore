@@ -3,9 +3,6 @@ secrets.yaml
 __pycache__/
 *.py[cod]
 
-# Local installation configuration and notes
-fuktstyrning.yaml
-io_test.yaml
-ds248x_test.yaml
-README.local.md
+# Local installation resources
 observations/
+.local-history/
