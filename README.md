@@ -2,10 +2,12 @@
 
 `ds248x_unified` is an external ESPHome component for a DS2484 I²C-to-1-Wire
 bridge. One hub owns the full 1-Wire transaction sequence and supports both
-DS18B20 temperature sensors and DS2438 modules fitted with Honeywell HIH-4031
-humidity sensors. The optional `mold_risk_index` sensor calculates local
-crawl-space mold risk from a chosen temperature and humidity sensor. The
-optional `vtt_mold_index` sensor adds the time-dependent Finnish/VTT index.
+DS18B20 temperature sensors and DS2438 humidity modules. Supported analogue
+humidity sensors are Honeywell HIH-4030/4031 (the default), HIH-3600,
+HIH-4000, and HIH-5030/5031, selectable per DS2438 module. The optional
+`mold_risk_index` sensor calculates local crawl-space mold risk from a chosen
+temperature and humidity sensor. The optional `vtt_mold_index` sensor adds the
+time-dependent Finnish/VTT index.
 
 ## What it publishes
 
