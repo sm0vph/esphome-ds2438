@@ -2,12 +2,15 @@
 
 #include "esphome/components/i2c/i2c.h"
 #include "esphome/components/sensor/sensor.h"
+#include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/preferences.h"
 
 #include <cmath>
 
 namespace esphome::ds248x_unified {
+
+class DS248CycleCompleteTrigger : public Trigger<> {};
 
 class DS18B20Sensor : public sensor::Sensor {
  public:
@@ -56,16 +59,19 @@ class DS248xUnifiedComponent : public PollingComponent, public i2c::I2CDevice {
   void set_strong_pullup(bool value) { strong_pullup_ = value; }
   void register_ds18b20(DS18B20Sensor *value) { ds18b20_.push_back(value); }
   void register_ds2438(DS2438Sensor *value) { ds2438_.push_back(value); }
+  void register_cycle_complete_trigger(DS248CycleCompleteTrigger *value) { cycle_complete_triggers_.push_back(value); }
  protected:
   bool active_pullup_{true};
   bool strong_pullup_{true};
   std::vector<DS18B20Sensor *> ds18b20_;
   std::vector<DS2438Sensor *> ds2438_;
+  std::vector<DS248CycleCompleteTrigger *> cycle_complete_triggers_;
   size_t index_{0};
   uint8_t page_[9]{};
   float temperature_{NAN};
   float vdd_{NAN};
   bool vad_retry_pending_{false};
+  bool cycle_had_error_{false};
 
   bool wait_(uint8_t *status = nullptr);
   bool set_config_(uint8_t config);
@@ -83,6 +89,7 @@ class DS248xUnifiedComponent : public PollingComponent, public i2c::I2CDevice {
   void read_ds2438_vdd_();
   void read_ds2438_vad_();
   void fail_ds2438_(const char *message);
+  void finish_cycle_();
 };
 
 }  // namespace esphome::ds248x_unified

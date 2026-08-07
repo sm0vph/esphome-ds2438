@@ -20,6 +20,31 @@ The hub runs one controlled update cycle: DS18B20 conversion and reads first,
 then each DS2438 temperature/VDD/VAD measurement. This avoids concurrent
 commands to the same DS2484 and is suitable for mixed 1-Wire networks.
 
+### Calculations after a complete bus cycle
+
+Use `on_cycle_complete` when derived values (such as mould indices or a local
+controller) must use a coherent set of 1-Wire values. The action runs after
+the hub has read every configured DS18B20 and DS2438 module for that cycle.
+Set the derived polling sensors to `update_interval: never`, then update them
+from the action:
+
+```yaml
+ds248x_unified:
+  - id: one_wire_hub
+    # ... address and sensor configuration ...
+    update_interval: 60s
+    on_cycle_complete:
+      then:
+        - component.update: crawlspace_mold_risk
+        - component.update: crawlspace_vtt_index
+        - lambda: |-
+            // Run local control here, or notify a separate controller.
+```
+
+If a short read fails, the affected sensor keeps its last valid value and the
+hub reports a warning. The completion action still runs, so a 60-second local
+control cadence is maintained without accepting an implausible new sample.
+
 ## Hardware
 
 - DS2484 at I²C address `0x18`;

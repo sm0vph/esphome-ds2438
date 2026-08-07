@@ -155,21 +155,31 @@ bool DS248xUnifiedComponent::read_ds18_(DS18B20Sensor *sensor) {
   sensor->publish_state(raw / 16.0f); return true;
 }
 void DS248xUnifiedComponent::update() {
-  if (!this->set_config_(this->active_pullup_ ? 0x01 : 0x00) || !this->reset_wire_()) { this->status_set_warning(); return; }
-  if (!this->write_wire_(0xCC)) return;
-  if (this->strong_pullup_ && !this->set_config_(0x05)) return;
-  if (!this->write_wire_(0x44)) return;
+  this->cycle_had_error_ = false;
+  if (!this->set_config_(this->active_pullup_ ? 0x01 : 0x00) || !this->reset_wire_()) {
+    this->cycle_had_error_ = true;
+    this->finish_cycle_();
+    return;
+  }
+  if (!this->write_wire_(0xCC) || (this->strong_pullup_ && !this->set_config_(0x05)) || !this->write_wire_(0x44)) {
+    this->cycle_had_error_ = true;
+    this->finish_cycle_();
+    return;
+  }
   this->index_ = 0;
   this->set_timeout("ds18_convert", 750, [this] { this->read_next_ds18_(); });
 }
 void DS248xUnifiedComponent::read_next_ds18_() {
   if (this->index_ >= this->ds18b20_.size()) { this->index_ = 0; this->start_next_ds2438_(); return; }
   auto *sensor = this->ds18b20_[this->index_++];
-  if (!this->read_ds18_(sensor)) sensor->publish_state(NAN);
+  if (!this->read_ds18_(sensor)) {
+    this->cycle_had_error_ = true;
+    ESP_LOGW(TAG, "0x%016llX: DS18B20 read failed; keeping last valid value", sensor->address());
+  }
   this->set_timeout("next_ds18", 50, [this] { this->read_next_ds18_(); });
 }
 void DS248xUnifiedComponent::start_next_ds2438_() {
-  if (this->index_ >= this->ds2438_.size()) { this->status_clear_warning(); return; }
+  if (this->index_ >= this->ds2438_.size()) { this->finish_cycle_(); return; }
   this->vad_retry_pending_ = false;
   auto *sensor = this->ds2438_[this->index_];
   if (!this->command_(sensor->address(), 0x44, true)) { this->fail_ds2438_("temperature conversion failed"); return; }
@@ -203,6 +213,7 @@ void DS248xUnifiedComponent::read_ds2438_vad_() {
       return;
     }
     ESP_LOGW(TAG, "0x%016llX: implausible VAD remains after retry; keeping last valid values", sensor->address());
+    this->cycle_had_error_ = true;
     this->vad_retry_pending_ = false;
     this->index_++;
     this->set_timeout("next_ds2438", 20, [this] { this->start_next_ds2438_(); });
@@ -214,8 +225,17 @@ void DS248xUnifiedComponent::read_ds2438_vad_() {
   this->index_++; this->set_timeout("next_ds2438", 20, [this] { this->start_next_ds2438_(); });
 }
 void DS248xUnifiedComponent::fail_ds2438_(const char *message) {
-  ESP_LOGW(TAG, "%s", message); this->ds2438_[this->index_]->publish_nan(); this->index_++;
+  ESP_LOGW(TAG, "%s; keeping last valid value", message);
+  this->cycle_had_error_ = true;
+  this->index_++;
   this->set_timeout("next_ds2438", 20, [this] { this->start_next_ds2438_(); });
+}
+void DS248xUnifiedComponent::finish_cycle_() {
+  if (this->cycle_had_error_)
+    this->status_set_warning();
+  else
+    this->status_clear_warning();
+  for (auto *trigger : this->cycle_complete_triggers_) trigger->trigger();
 }
 
 }  // namespace esphome::ds248x_unified
