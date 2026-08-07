@@ -51,6 +51,7 @@ ds248x_unified:
     ds2438:
       - id: humidity_module
         address: 0x0000000000000026
+        humidity_model: hih4031
         humidity:
           id: crawlspace_humidity
           name: "Relative humidity"

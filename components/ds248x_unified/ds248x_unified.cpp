@@ -9,9 +9,33 @@ namespace esphome::ds248x_unified {
 static const char *const TAG = "ds248x_unified";
 
 void DS2438Sensor::publish(float temperature, float vdd, float vad) {
-  const float raw = ((vad / vdd) - 0.16f) / 0.0062f;
-  const float humidity = raw / (1.0546f - 0.00216f * temperature);
-  if (!std::isfinite(humidity) || vdd < 4.0f || vdd > 5.8f) {
+  const float ratio = vad / vdd;
+  float raw = NAN;
+  float compensation = NAN;
+  float minimum_vdd = 4.0f;
+  float maximum_vdd = 5.8f;
+  switch (this->humidity_model_) {
+    case 0:  // Honeywell HIH-4030/4031
+    case 1:  // Honeywell HIH-3600 series
+      raw = (ratio - 0.16f) / 0.0062f;
+      compensation = 1.0546f - 0.00216f * temperature;
+      break;
+    case 2:  // Honeywell HIH-4000 series
+      raw = (ratio - 0.16f) / 0.0062f;
+      compensation = 1.0305f + 0.000044f * temperature - 0.0000011f * temperature * temperature;
+      break;
+    case 3:  // Honeywell HIH-5030/5031 series
+      raw = (ratio - 0.1515f) / 0.00636f;
+      compensation = 1.0546f - 0.00216f * temperature;
+      minimum_vdd = 2.7f;
+      maximum_vdd = 5.5f;
+      break;
+    default:
+      this->publish_nan();
+      return;
+  }
+  const float humidity = raw / compensation;
+  if (!std::isfinite(humidity) || !std::isfinite(raw) || vdd < minimum_vdd || vdd > maximum_vdd) {
     this->publish_nan();
     return;
   }

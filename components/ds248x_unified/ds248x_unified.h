@@ -25,6 +25,7 @@ class DS2438Sensor {
   void set_temperature(sensor::Sensor *value) { temperature_ = value; }
   void set_vad(sensor::Sensor *value) { vad_ = value; }
   void set_vdd(sensor::Sensor *value) { vdd_ = value; }
+  void set_humidity_model(uint8_t value) { humidity_model_ = value; }
   void publish(float temperature, float vdd, float vad);
   void publish_nan();
  protected:
@@ -34,6 +35,8 @@ class DS2438Sensor {
   sensor::Sensor *temperature_{nullptr};
   sensor::Sensor *vad_{nullptr};
   sensor::Sensor *vdd_{nullptr};
+  // 0=HIH-4030/4031, 1=HIH-3600, 2=HIH-4000, 3=HIH-5030/5031.
+  uint8_t humidity_model_{0};
 };
 
 class DS248xUnifiedComponent : public PollingComponent, public i2c::I2CDevice {

@@ -60,6 +60,7 @@ ds248x_unified:
     ds2438:
       - id: humidity_module
         address: 0x0000000000000026
+        humidity_model: hih4031
         humidity:
           name: "Relative humidity"
         temperature:
@@ -78,15 +79,27 @@ ds248x_unified:
 Replace every example address with the complete 64-bit 1-Wire address. See
 [`example.yaml`](example.yaml) for a complete ESPHome configuration.
 
-## HIH-4031 calculation
+## DS2438 humidity models
 
-```text
-raw_RH  = ((VAD / VDD) - 0.16) / 0.0062
-true_RH = raw_RH / (1.0546 - 0.00216 × temperature_C)
-```
+Choose the analogue humidity sensor fitted to each DS2438 module with
+`humidity_model`. Existing configurations default to `hih4031` and therefore
+keep their current behaviour.
 
-The DS2438 temperature is used for compensation. The hub uses DS2438 Recall
-Memory before every scratchpad read, as required by the DS2438 protocol.
+| `humidity_model` | Raw RH from `VAD/VDD` | Temperature compensation | Supported supply |
+|---|---|---|---|
+| `hih4031` (default) | `(ratio - 0.16) / 0.0062` | `1.0546 - 0.00216 × T` | 4.0–5.8 V |
+| `hih3600` | `(ratio - 0.16) / 0.0062` | `1.0546 - 0.00216 × T` | 4.0–5.8 V |
+| `hih4000` | `(ratio - 0.16) / 0.0062` | `1.0305 + 0.000044 × T - 0.0000011 × T²` | 4.0–5.8 V |
+| `hih5030` | `(ratio - 0.1515) / 0.00636` | `1.0546 - 0.00216 × T` | 2.7–5.5 V |
+
+The published compensated RH is `raw_RH / compensation`, using the DS2438
+temperature in °C. `hih5030` also covers the electrically compatible
+HIH-5031. The formulas follow the Honeywell data sheets for the HIH-4030/31,
+HIH-4000 and HIH-5030/31 families; verify the actual sensor part number before
+selecting a model.
+
+The hub uses DS2438 Recall Memory before every scratchpad read, as required by
+the DS2438 protocol.
 
 ## Local mold risk index
 
