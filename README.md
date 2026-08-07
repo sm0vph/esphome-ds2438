@@ -1,4 +1,4 @@
-# ESPHome DS248x unified hub
+# ESPHome humidity monitor
 
 `ds248x_unified` is an external ESPHome component for a DS2484 I²C-to-1-Wire
 bridge. One hub owns the full 1-Wire transaction sequence and supports both
@@ -30,7 +30,7 @@ commands to the same DS2484 and is suitable for mixed 1-Wire networks.
 
 ```yaml
 external_components:
-  - source: github://sm0vph/esphome-ds2438@main
+  - source: github://sm0vph/esphome-humidity-monitor@main
     components: [ds248x_unified, mold_risk_index, vtt_mold_index]
     refresh: 0s
 ```
