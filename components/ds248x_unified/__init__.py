@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import i2c, sensor
-from esphome.const import CONF_ADDRESS, CONF_ID, CONF_TEMPERATURE, DEVICE_CLASS_HUMIDITY, DEVICE_CLASS_TEMPERATURE, DEVICE_CLASS_VOLTAGE, STATE_CLASS_MEASUREMENT, UNIT_CELSIUS, UNIT_PERCENT, UNIT_VOLT
+from esphome.const import CONF_ADDRESS, CONF_ID, CONF_TEMPERATURE, DEVICE_CLASS_HUMIDITY, DEVICE_CLASS_TEMPERATURE, DEVICE_CLASS_VOLTAGE, STATE_CLASS_MEASUREMENT, STATE_CLASS_TOTAL_INCREASING, UNIT_CELSIUS, UNIT_PERCENT, UNIT_VOLT
 
 CODEOWNERS = []
 DEPENDENCIES = ["i2c"]
@@ -14,6 +14,7 @@ CONF_HUMIDITY = "humidity"
 CONF_HUMIDITY_RAW = "humidity_raw"
 CONF_VAD = "vad"
 CONF_VDD = "vdd"
+CONF_INVALID_READINGS = "invalid_readings"
 CONF_ACTIVE_PULLUP = "active_pullup"
 CONF_STRONG_PULLUP = "strong_pullup"
 CONF_HUMIDITY_MODEL = "humidity_model"
@@ -32,8 +33,9 @@ DS2438 = ns.class_("DS2438Sensor")
 temperature_schema = sensor.sensor_schema(unit_of_measurement=UNIT_CELSIUS, accuracy_decimals=1, device_class=DEVICE_CLASS_TEMPERATURE, state_class=STATE_CLASS_MEASUREMENT)
 humidity_schema = sensor.sensor_schema(unit_of_measurement=UNIT_PERCENT, accuracy_decimals=1, device_class=DEVICE_CLASS_HUMIDITY, state_class=STATE_CLASS_MEASUREMENT)
 voltage_schema = sensor.sensor_schema(unit_of_measurement=UNIT_VOLT, accuracy_decimals=2, device_class=DEVICE_CLASS_VOLTAGE, state_class=STATE_CLASS_MEASUREMENT)
+invalid_readings_schema = sensor.sensor_schema(accuracy_decimals=0, state_class=STATE_CLASS_TOTAL_INCREASING)
 DS18_SCHEMA = sensor.sensor_schema(DS18, unit_of_measurement=UNIT_CELSIUS, accuracy_decimals=1, device_class=DEVICE_CLASS_TEMPERATURE, state_class=STATE_CLASS_MEASUREMENT).extend({cv.Required(CONF_ADDRESS): cv.uint64_t})
-DS2438_SCHEMA = cv.Schema({cv.GenerateID(): cv.declare_id(DS2438), cv.Required(CONF_ADDRESS): cv.uint64_t, cv.Required(CONF_HUMIDITY): humidity_schema, cv.Optional(CONF_HUMIDITY_MODEL, default="hih4031"): cv.enum(HUMIDITY_MODELS, lower=True), cv.Optional(CONF_HUMIDITY_RAW): humidity_schema, cv.Optional(CONF_TEMPERATURE): temperature_schema, cv.Optional(CONF_VAD): voltage_schema, cv.Optional(CONF_VDD): voltage_schema})
+DS2438_SCHEMA = cv.Schema({cv.GenerateID(): cv.declare_id(DS2438), cv.Required(CONF_ADDRESS): cv.uint64_t, cv.Required(CONF_HUMIDITY): humidity_schema, cv.Optional(CONF_HUMIDITY_MODEL, default="hih4031"): cv.enum(HUMIDITY_MODELS, lower=True), cv.Optional(CONF_HUMIDITY_RAW): humidity_schema, cv.Optional(CONF_TEMPERATURE): temperature_schema, cv.Optional(CONF_VAD): voltage_schema, cv.Optional(CONF_VDD): voltage_schema, cv.Optional(CONF_INVALID_READINGS): invalid_readings_schema})
 CONFIG_SCHEMA = cv.Schema({cv.GenerateID(): cv.declare_id(Hub), cv.Optional(CONF_ACTIVE_PULLUP, default=True): cv.boolean, cv.Optional(CONF_STRONG_PULLUP, default=True): cv.boolean, cv.Required(CONF_DS18B20): cv.ensure_list(DS18_SCHEMA), cv.Required(CONF_DS2438): cv.ensure_list(DS2438_SCHEMA)}).extend(cv.polling_component_schema("60s")).extend(i2c.i2c_device_schema(0x18))
 
 async def to_code(config):
@@ -55,4 +57,5 @@ async def to_code(config):
         if CONF_TEMPERATURE in item: cg.add(value.set_temperature(await sensor.new_sensor(item[CONF_TEMPERATURE])))
         if CONF_VAD in item: cg.add(value.set_vad(await sensor.new_sensor(item[CONF_VAD])))
         if CONF_VDD in item: cg.add(value.set_vdd(await sensor.new_sensor(item[CONF_VDD])))
+        if CONF_INVALID_READINGS in item: cg.add(value.set_invalid_readings(await sensor.new_sensor(item[CONF_INVALID_READINGS])))
         cg.add(hub.register_ds2438(value))

@@ -66,6 +66,9 @@ ds248x_unified:
         vdd:
           name: "DS2438 supply voltage"
           entity_category: diagnostic
+        invalid_readings:
+          name: "DS2438 invalid readings"
+          entity_category: diagnostic
 
 sensor:
   # Optional, time-dependent diagnostic. It does not control any switch.

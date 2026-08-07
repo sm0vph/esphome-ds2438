@@ -3,6 +3,7 @@
 #include "esphome/components/i2c/i2c.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/core/component.h"
+#include "esphome/core/preferences.h"
 
 #include <cmath>
 
@@ -25,8 +26,12 @@ class DS2438Sensor {
   void set_temperature(sensor::Sensor *value) { temperature_ = value; }
   void set_vad(sensor::Sensor *value) { vad_ = value; }
   void set_vdd(sensor::Sensor *value) { vdd_ = value; }
+  void set_invalid_readings(sensor::Sensor *value) { invalid_readings_ = value; }
   void set_humidity_model(uint8_t value) { humidity_model_ = value; }
-  void publish(float temperature, float vdd, float vad);
+  void setup();
+  bool is_valid_reading(float temperature, float vdd, float vad) const;
+  bool publish(float temperature, float vdd, float vad);
+  void report_invalid_reading();
   void publish_nan();
  protected:
   uint64_t address_{0};
@@ -35,6 +40,9 @@ class DS2438Sensor {
   sensor::Sensor *temperature_{nullptr};
   sensor::Sensor *vad_{nullptr};
   sensor::Sensor *vdd_{nullptr};
+  sensor::Sensor *invalid_readings_{nullptr};
+  uint32_t invalid_reading_count_{0};
+  ESPPreferenceObject invalid_readings_preference_;
   // 0=HIH-4030/4031, 1=HIH-3600, 2=HIH-4000, 3=HIH-5030/5031.
   uint8_t humidity_model_{0};
 };
@@ -57,6 +65,7 @@ class DS248xUnifiedComponent : public PollingComponent, public i2c::I2CDevice {
   uint8_t page_[9]{};
   float temperature_{NAN};
   float vdd_{NAN};
+  bool vad_retry_pending_{false};
 
   bool wait_(uint8_t *status = nullptr);
   bool set_config_(uint8_t config);

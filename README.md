@@ -13,7 +13,7 @@ time-dependent Finnish/VTT index.
 
 - DS18B20 temperature;
 - temperature-compensated relative humidity from each DS2438/HIH-4031;
-- DS2438 local temperature, VAD and VDD; and
+- DS2438 local temperature, VAD, VDD and invalid-reading counter; and
 - uncompensated relative humidity as diagnostics.
 
 The hub runs one controlled update cycle: DS18B20 conversion and reads first,
@@ -76,6 +76,9 @@ ds248x_unified:
         vdd:
           name: "DS2438 supply voltage"
           entity_category: diagnostic
+        invalid_readings:
+          name: "DS2438 invalid readings"
+          entity_category: diagnostic
 ```
 
 Replace every example address with the complete 64-bit 1-Wire address. See
@@ -102,6 +105,15 @@ selecting a model.
 
 The hub uses DS2438 Recall Memory before every scratchpad read, as required by
 the DS2438 protocol.
+
+### DS2438 read validation
+
+The component rejects impossible humidity samples, including VAD readings close
+to VDD (a known symptom of a stale VDD conversion being read as VAD). It repeats
+the VAD conversion with a longer wait once. If the retry is still implausible,
+the component retains the previously published values and increments optional
+`invalid_readings`. This diagnostic counter is retained across ordinary OTA
+updates and reboots.
 
 ## Local mold risk index
 

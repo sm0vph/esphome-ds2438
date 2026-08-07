@@ -8,7 +8,18 @@
 namespace esphome::ds248x_unified {
 static const char *const TAG = "ds248x_unified";
 
-void DS2438Sensor::publish(float temperature, float vdd, float vad) {
+void DS2438Sensor::setup() {
+  const uint32_t preference_key = static_cast<uint32_t>(this->address_ ^ (this->address_ >> 32) ^ 0xD52438A1U);
+  this->invalid_readings_preference_ = global_preferences->make_preference<uint32_t>(preference_key);
+  if (!this->invalid_readings_preference_.load(&this->invalid_reading_count_)) this->invalid_reading_count_ = 0;
+  if (this->invalid_readings_ != nullptr) this->invalid_readings_->publish_state(this->invalid_reading_count_);
+}
+
+bool DS2438Sensor::is_valid_reading(float temperature, float vdd, float vad) const {
+  // A VAD value near VDD is not physically possible for the supported HIH
+  // sensors. It indicates that DS2438 returned the preceding VDD conversion.
+  if (!std::isfinite(temperature) || !std::isfinite(vdd) || !std::isfinite(vad) || vad <= 0.0f || vad >= vdd * 0.90f)
+    return false;
   const float ratio = vad / vdd;
   float raw = NAN;
   float compensation = NAN;
@@ -31,19 +42,46 @@ void DS2438Sensor::publish(float temperature, float vdd, float vad) {
       maximum_vdd = 5.5f;
       break;
     default:
-      this->publish_nan();
-      return;
+      return false;
   }
   const float humidity = raw / compensation;
-  if (!std::isfinite(humidity) || !std::isfinite(raw) || vdd < minimum_vdd || vdd > maximum_vdd) {
-    this->publish_nan();
-    return;
+  return std::isfinite(humidity) && std::isfinite(raw) && vdd >= minimum_vdd && vdd <= maximum_vdd && humidity >= 0.0f && humidity <= 100.0f;
+}
+
+bool DS2438Sensor::publish(float temperature, float vdd, float vad) {
+  if (!this->is_valid_reading(temperature, vdd, vad)) return false;
+  const float ratio = vad / vdd;
+  float raw = NAN;
+  float compensation = NAN;
+  switch (this->humidity_model_) {
+    case 0:
+    case 1:
+      raw = (ratio - 0.16f) / 0.0062f;
+      compensation = 1.0546f - 0.00216f * temperature;
+      break;
+    case 2:
+      raw = (ratio - 0.16f) / 0.0062f;
+      compensation = 1.0305f + 0.000044f * temperature - 0.0000011f * temperature * temperature;
+      break;
+    case 3:
+      raw = (ratio - 0.1515f) / 0.00636f;
+      compensation = 1.0546f - 0.00216f * temperature;
+      break;
+    default:
+      return false;
   }
+  const float humidity = raw / compensation;
   this->humidity_->publish_state(humidity);
   if (this->raw_ != nullptr) this->raw_->publish_state(raw);
   if (this->temperature_ != nullptr) this->temperature_->publish_state(temperature);
   if (this->vad_ != nullptr) this->vad_->publish_state(vad);
   if (this->vdd_ != nullptr) this->vdd_->publish_state(vdd);
+  return true;
+}
+void DS2438Sensor::report_invalid_reading() {
+  this->invalid_reading_count_++;
+  this->invalid_readings_preference_.save(&this->invalid_reading_count_);
+  if (this->invalid_readings_ != nullptr) this->invalid_readings_->publish_state(this->invalid_reading_count_);
 }
 void DS2438Sensor::publish_nan() {
   this->humidity_->publish_state(NAN);
@@ -53,7 +91,10 @@ void DS2438Sensor::publish_nan() {
   if (this->vdd_ != nullptr) this->vdd_->publish_state(NAN);
 }
 
-void DS248xUnifiedComponent::setup() { this->set_config_(this->active_pullup_ ? 0x01 : 0x00); }
+void DS248xUnifiedComponent::setup() {
+  for (auto *sensor : this->ds2438_) sensor->setup();
+  this->set_config_(this->active_pullup_ ? 0x01 : 0x00);
+}
 void DS248xUnifiedComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "DS248x unified hub:");
   LOG_I2C_DEVICE(this);
@@ -129,6 +170,7 @@ void DS248xUnifiedComponent::read_next_ds18_() {
 }
 void DS248xUnifiedComponent::start_next_ds2438_() {
   if (this->index_ >= this->ds2438_.size()) { this->status_clear_warning(); return; }
+  this->vad_retry_pending_ = false;
   auto *sensor = this->ds2438_[this->index_];
   if (!this->command_(sensor->address(), 0x44, true)) { this->fail_ds2438_("temperature conversion failed"); return; }
   this->set_timeout("ds2438_temperature", 15, [this] { this->read_ds2438_temperature_(); });
@@ -151,6 +193,22 @@ void DS248xUnifiedComponent::read_ds2438_vad_() {
   auto *sensor = this->ds2438_[this->index_];
   if (!this->read_ds2438_page_(sensor->address())) { this->fail_ds2438_("VAD read failed"); return; }
   const float vad = ((uint16_t(this->page_[4]) << 8) | this->page_[3]) / 100.0f;
+  if (!sensor->is_valid_reading(this->temperature_, this->vdd_, vad)) {
+    if (!this->vad_retry_pending_) {
+      this->vad_retry_pending_ = true;
+      sensor->report_invalid_reading();
+      ESP_LOGW(TAG, "0x%016llX: implausible VAD=%.2f V (VDD=%.2f V), retrying conversion", sensor->address(), vad, this->vdd_);
+      if (!this->command_(sensor->address(), 0xB4, true)) { this->fail_ds2438_("VAD retry conversion failed"); return; }
+      this->set_timeout("ds2438_vad_retry", 30, [this] { this->read_ds2438_vad_(); });
+      return;
+    }
+    ESP_LOGW(TAG, "0x%016llX: implausible VAD remains after retry; keeping last valid values", sensor->address());
+    this->vad_retry_pending_ = false;
+    this->index_++;
+    this->set_timeout("next_ds2438", 20, [this] { this->start_next_ds2438_(); });
+    return;
+  }
+  this->vad_retry_pending_ = false;
   sensor->publish(this->temperature_, this->vdd_, vad);
   ESP_LOGD(TAG, "0x%016llX: T=%.2f VDD=%.2f VAD=%.2f", sensor->address(), this->temperature_, this->vdd_, vad);
   this->index_++; this->set_timeout("next_ds2438", 20, [this] { this->start_next_ds2438_(); });
