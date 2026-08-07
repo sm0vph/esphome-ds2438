@@ -139,7 +139,7 @@ reboots.
 `vtt_mold_index` implements the time-dependent Finnish/VTT model, which
 integrates temperature and RH into a mould index from `0` to `6`. The value is
 saved by the ESP32 every 15 minutes so normal reboots retain the accumulated
-history. It is diagnostic only: adding this sensor does not control any switch.
+history.
 
 ```yaml
 sensor:
